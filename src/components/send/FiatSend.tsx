@@ -25,6 +25,7 @@ import {
   quoteGlobalSend,
   useCorridors,
   useGlobalSendPreview,
+  useReceiveSolve,
   type GlobalSendBeneficiary,
   type GlobalSendQuote,
   type WithdrawalQuote,
@@ -43,6 +44,7 @@ import { InvoiceAttach, type AttachedInvoice } from "./InvoiceAttach";
 import { PayoutRecipientFields } from "./PayoutRecipientFields";
 import { PromptModal, type PromptSpec } from "./PromptModal";
 import { PurposeSection } from "./PurposeSection";
+import { Segment } from "./Segment";
 import { RecipientChips } from "./RecipientChips";
 import { recipientBeneficiary, recipientProblems, type RecipientValues } from "./RecipientSchemaFields";
 import { EMPTY_PAYOUT_FIELDS, globalFeeRows, type PayoutFields } from "./payout";
@@ -115,6 +117,11 @@ export function FiatSend({ asset }: { asset: string }) {
   // A corridor that describes its own recipient form (recipientSchema).
   const [recipientValues, setRecipientValues] = useState<RecipientValues>({});
   const [amount, setAmount] = useState("");
+  // Which side of a cross-border send the user types: the naira they send
+  // (exact), or what the recipient gets in their currency (an estimate, from
+  // which the naira is worked out). Either way the send is made in naira.
+  const [amountMode, setAmountMode] = useState<"send" | "receive">("send");
+  const [receiveText, setReceiveText] = useState("");
   // Reason for payment: asked on every cross-border send, never on a
   // withdrawal to the sender's own bank. What the sender picked; see
   // `purpose` below for what is sent.
@@ -209,8 +216,21 @@ export function FiatSend({ asset }: { asset: string }) {
           targetCountry === "CN" && !fields.recipientBank.trim() ? "recipient's bank" : "",
           ...(isChinaSupplier ? chinaMissing(china) : []),
         ].filter(Boolean);
+  // "They receive": the naira that buys about that much, from live quotes.
+  const receiveMode = amountMode === "receive" && !isOwnAccountPayout && targetCountry !== "";
+  const receiveTarget = Number(receiveText);
+  const solve = useReceiveSolve({
+    target: receiveTarget,
+    destinationCountry: targetCountry,
+    asset,
+    enabled: receiveMode,
+  });
+  // Only an answer for what is typed now counts: mid-typing, the last answer
+  // is for an older figure and must not be reviewed or sent.
+  const solvedFor = receiveMode && solve.data && solve.data.target === receiveTarget ? solve.data : null;
+  const amountText = receiveMode ? (solvedFor ? String(solvedFor.amount) : "") : amount;
   // The amount is its own gate: present, numeric, and greater than zero.
-  const payoutAmount = Number(amount);
+  const payoutAmount = Number(amountText);
   // The rate on the amount form, from a live quote as the user types.
   const preview = useGlobalSendPreview({
     amount: payoutAmount,
@@ -219,7 +239,7 @@ export function FiatSend({ asset }: { asset: string }) {
     enabled: !isOwnAccountPayout,
   });
   const previewRate = preview.data ? exchangeRateLabel(preview.data) : null;
-  const amountValid = amount.trim() !== "" && Number.isFinite(payoutAmount) && payoutAmount > 0;
+  const amountValid = amountText.trim() !== "" && Number.isFinite(payoutAmount) && payoutAmount > 0;
   // Every payout on the web is typed and paid in the sender's own currency
   // (cross-border included: lib/globalSend sends amountIn 'fiat'), so the
   // fiat balance bounds it.
@@ -440,6 +460,7 @@ export function FiatSend({ asset }: { asset: string }) {
       setChina(EMPTY_CHINA_DETAILS);
       setRecipientValues({});
       setAmount("");
+      setReceiveText("");
       setChosenRecipient(null);
       // The server has claimed this invoice for the payment just made, so it
       // cannot be used again.
@@ -700,22 +721,52 @@ export function FiatSend({ asset }: { asset: string }) {
         </div>
       )}
 
-      <Input
-        label={fiatCurrency ? `Amount (${fiatCurrency})` : "Amount"}
-        placeholder="0.00"
-        inputMode="decimal"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        hint={
-          !isOwnAccountPayout && corridor?.minAssetAmount
-            ? minInFiat
-              ? `Minimum about ${minInFiat} after fees. Available: ${formatMoney(fiatAvailable, fiatCurrency)}.`
-              : `Minimum ${corridor.minAssetAmount} ${asset} after fees.`
-            : !isOwnAccountPayout && fiatCurrency
-              ? `Available: ${formatMoney(fiatAvailable, fiatCurrency)}.`
-              : undefined
-        }
-      />
+      {!isOwnAccountPayout && targetCountry !== "" && corridor && (
+        <Segment
+          label="Enter the amount as"
+          options={[
+            { value: "send", label: `You send (${fiatCurrency || "your currency"})` },
+            { value: "receive", label: `They receive (${corridor.currency})` },
+          ]}
+          value={amountMode}
+          onChange={setAmountMode}
+        />
+      )}
+
+      {receiveMode ? (
+        <Input
+          label={`They receive (${corridor?.currency ?? ""})`}
+          placeholder="0.00"
+          inputMode="decimal"
+          value={receiveText}
+          onChange={(e) => setReceiveText(e.target.value)}
+          error={solve.error ? friendlyErrorMessage(solve.error, "We could not price this amount just now.") : null}
+          hint={
+            receiveText.trim() === ""
+              ? `We work out the ${fiatCurrency || "amount"} to send. Available: ${formatMoney(fiatAvailable, fiatCurrency)}.`
+              : solvedFor
+                ? `You send ${formatMoney(solvedFor.amount, fiatCurrency || solvedFor.quote.sourceCurrency)}. What arrives is an estimate: the delivering partner sets it at payout.`
+                : `Working out the ${fiatCurrency || "amount"} to send…`
+          }
+        />
+      ) : (
+        <Input
+          label={fiatCurrency ? `Amount (${fiatCurrency})` : "Amount"}
+          placeholder="0.00"
+          inputMode="decimal"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          hint={
+            !isOwnAccountPayout && corridor?.minAssetAmount
+              ? minInFiat
+                ? `Minimum about ${minInFiat} after fees. Available: ${formatMoney(fiatAvailable, fiatCurrency)}.`
+                : `Minimum ${corridor.minAssetAmount} ${asset} after fees.`
+              : !isOwnAccountPayout && fiatCurrency
+                ? `Available: ${formatMoney(fiatAvailable, fiatCurrency)}.`
+                : undefined
+          }
+        />
+      )}
 
       {!isOwnAccountPayout && targetCountry !== "" && (
         <div className="rounded-xl border border-border bg-background px-4 py-3">

@@ -400,3 +400,73 @@ export async function initiateGlobalSend(input: {
   );
   return res.data;
 }
+
+/**
+ * The naira to send for the recipient to get about `target` of their own
+ * currency -- the "They receive" side of the amount switch.
+ *
+ * The partner quotes only one way (an amount in the sender's currency, see
+ * amountIn), and fees sit between the two figures (some flat, some a share,
+ * the delivering partner's own off the far end), so the naira is found by
+ * asking: a first guess from the market rates, then up to two corrections
+ * from what each quote says arrives. Rounded up to whole naira, so the
+ * estimate never falls short of what was asked. What arrives stays an
+ * estimate either way: the delivering partner sets it at payout.
+ */
+export async function solveSendForReceive(input: {
+  target: number;
+  destinationCountry: string;
+  asset: string;
+}): Promise<{ amount: number; quote: GlobalSendQuote; target: number }> {
+  const ask = (amount: number) =>
+    quoteGlobalSend({ amount, destinationCountry: input.destinationCountry, asset: input.asset });
+  const received = (q: GlobalSendQuote) => {
+    if (q.estimatedDestinationAmount === null) {
+      throw new Error("This destination does not quote what arrives, so enter the amount you send instead.");
+    }
+    return q.estimatedDestinationAmount;
+  };
+
+  // A probe big enough to sit above any corridor minimum, for the rate.
+  const PROBE = 1_000_000;
+  let prevAmount = PROBE;
+  let prevGot = received(await ask(PROBE));
+  if (!(prevGot > 0)) throw new Error("We could not price this destination just now.");
+
+  let amount = Math.ceil((input.target / prevGot) * PROBE);
+  let quote = await ask(amount);
+  for (let i = 0; i < 2; i++) {
+    const got = received(quote);
+    // Close enough: within a hundredth of the recipient's currency, or 0.1%.
+    if (got >= input.target && got - input.target <= Math.max(0.01, input.target * 0.001)) break;
+    // Secant step between the last two quotes; the relation is near linear.
+    const slope = (got - prevGot) / (amount - prevAmount);
+    if (!Number.isFinite(slope) || slope <= 0) break;
+    const next = Math.ceil(amount + (input.target - got) / slope);
+    if (next === amount) break;
+    prevAmount = amount;
+    prevGot = got;
+    amount = next;
+    quote = await ask(amount);
+  }
+  return { amount, quote, target: input.target };
+}
+
+/** solveSendForReceive for the amount being typed, once typing pauses. */
+export function useReceiveSolve(input: {
+  target: number;
+  destinationCountry: string;
+  asset: string;
+  enabled: boolean;
+}) {
+  const target = useSettled(input.target, 600);
+  return useQuery({
+    queryKey: ["global-send-receive", input.destinationCountry, input.asset, target],
+    queryFn: () =>
+      solveSendForReceive({ target, destinationCountry: input.destinationCountry, asset: input.asset }),
+    enabled:
+      input.enabled && !!input.destinationCountry && !!input.asset && Number.isFinite(target) && target > 0,
+    staleTime: 30_000,
+    retry: false,
+  });
+}
