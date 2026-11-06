@@ -463,7 +463,7 @@ export function FiatSend({ asset }: { asset: string }) {
         setTwoFactorCode("");
         setPrompt({
           title: sentCode ? "Code not accepted" : "Two-factor required",
-          message: twoFactorMessage(!!sentCode),
+          message: twoFactorMessage(!!sentCode, err),
         });
       } else if (PAYMENT_PURPOSE_ERROR_CODES.has(apiErrorCode(err) ?? "")) {
         // The server's message is customer-ready. Point at the picker.
@@ -780,7 +780,7 @@ export function FiatSend({ asset }: { asset: string }) {
       {needsInvoice && <InvoiceAttach invoice={invoice} onChange={setInvoice} />}
 
       {needs2fa && (
-        <CodeInput label="Authenticator code" value={twoFactorCode} onChange={(e) => setTwoFactorCode(e.target.value)} />
+        <CodeInput label="Security code" value={twoFactorCode} onChange={(e) => setTwoFactorCode(e.target.value)} />
       )}
 
       <Button
