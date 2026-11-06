@@ -473,7 +473,7 @@ export function FiatSend({ asset }: { asset: string }) {
         title: isOwnAccountPayout ? "Withdrawal initiated" : "Payout submitted",
         message: isOwnAccountPayout
           ? `${formatMoney(payoutAmount, fiatCurrency)} is on its way to your bank account.`
-          : `${result.assetAmount ?? payoutAmount} ${result.asset ?? asset} is being sent to our ${result.corridor} partner, who will pay the recipient in ${result.currency}.`,
+          : `${formatMoney(payoutAmount, fiatCurrency)} is on its way. Our ${result.corridor} partner will pay the recipient in ${result.currency}.`,
         buttons: toSave
           ? [
               {
@@ -638,13 +638,14 @@ export function FiatSend({ asset }: { asset: string }) {
           ? ([
               ["Amount", money(globalQuote.sourceAmount, globalQuote.sourceCurrency)],
               ...globalFeeRows(globalQuote, money),
-              ["Sent as", money(globalQuote.assetAmount, globalQuote.asset)],
               [
                 "Recipient gets",
                 globalQuote.estimatedDestinationAmount !== null
                   ? `≈ ${money(globalQuote.estimatedDestinationAmount, globalQuote.destinationCurrency)}`
                   : `Set in ${globalQuote.destinationCurrency} at payout`,
               ],
+              // The stablecoin the money travels as: the rail, not what is paid or received.
+              ["Travels as", money(globalQuote.assetAmount, globalQuote.asset)],
             ] satisfies ReviewRow[])
           : []),
       ];
