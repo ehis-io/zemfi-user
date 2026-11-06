@@ -17,7 +17,7 @@ export const ICONS = {
   send: icon("M5 12h14M13 6l6 6-6 6"),
   receive: icon("M19 12H5M11 6l-6 6 6 6"),
   convert: icon("M7 7h11l-3-3M17 17H6l3 3"),
-  tokens: icon("M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 4v10M9 9.5c0-1 1.3-1.8 3-1.8s3 .8 3 1.8-1.3 1.6-3 2-3 1-3 2 1.3 1.8 3 1.8 3-.8 3-1.8"),
+  tokens: icon("M9 15a6 6 0 1 0 0-12 6 6 0 0 0 0 12ZM18.1 10.4a6 6 0 1 1-7.7 7.7M7 7h2v4"),
   bills: icon("M6 3h12v18l-3-2-3 2-3-2-3 2V3Zm3 5h6M9 12h6"),
   bank: icon("M3 10h18M5 10v8M9 10v8M15 10v8M19 10v8M3 21h18M12 3 3 8h18l-9-5Z"),
 };
