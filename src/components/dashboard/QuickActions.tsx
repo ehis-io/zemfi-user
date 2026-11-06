@@ -23,13 +23,28 @@ export const ICONS = {
 };
 
 const tile =
-  "flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface px-2 py-4 text-sm font-medium transition-colors hover:border-primary";
+  "group flex flex-col items-center gap-2.5 rounded-3xl border border-border/70 bg-surface px-2 py-5 text-sm font-semibold shadow-card transition-all hover:-translate-y-0.5 hover:border-primary/40";
+
+/** Each action in its own colour, so the row reads at a glance. */
+const HUES: Record<string, string> = {
+  Send: "from-[#1a63f0] to-[#0145ce] shadow-[#0145ce]/40",
+  Receive: "from-emerald-400 to-emerald-600 shadow-emerald-600/40",
+  Convert: "from-violet-400 to-violet-600 shadow-violet-600/40",
+  Tokens: "from-amber-400 to-orange-500 shadow-orange-500/40",
+  Bills: "from-pink-400 to-rose-600 shadow-rose-600/40",
+};
 
 /** One action tile: a link, or a button when the capability is coming soon. */
 export function ActionTile({ href, label, icon, soon, onSoon }: { href: string; label: string; icon: ReactNode; soon?: boolean; onSoon?: () => void }) {
   const body = (
     <>
-      <span className={`flex size-11 items-center justify-center rounded-full ${soon ? "bg-wash text-muted" : "bg-wash text-primary"}`}>{icon}</span>
+      <span
+        className={`flex size-12 items-center justify-center rounded-2xl transition-transform group-hover:scale-105 ${
+          soon ? "bg-wash text-muted" : `bg-gradient-to-br text-white shadow-lg ${HUES[label] ?? HUES.Send}`
+        }`}
+      >
+        {icon}
+      </span>
       <span className={soon ? "text-muted" : ""}>{label}</span>
       {soon && <span className="-mt-1 text-[0.65rem] font-semibold uppercase tracking-wider text-subtle">Soon</span>}
     </>
