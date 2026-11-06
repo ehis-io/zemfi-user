@@ -163,7 +163,9 @@ export function FiatSend({ asset }: { asset: string }) {
 
   // The sender's local fiat, read off their balances rather than assumed.
   const fiatBalance = balances?.find((b) => !isStablecoin(b.currency));
-  const fiatCurrency = fiatBalance?.currency ?? corridor?.currency ?? "";
+  // The corridor's currency is the sender's own only for a withdrawal home;
+  // abroad it is the recipient's, so it must not label what the sender pays.
+  const fiatCurrency = fiatBalance?.currency ?? (isOwnAccountPayout ? corridor?.currency : undefined) ?? "";
   const fiatAvailable = balanceOf(balances, fiatCurrency);
 
   // Driven by what the corridor says it requires, so an older server that
@@ -218,8 +220,16 @@ export function FiatSend({ asset }: { asset: string }) {
   });
   const previewRate = preview.data ? exchangeRateLabel(preview.data) : null;
   const amountValid = amount.trim() !== "" && Number.isFinite(payoutAmount) && payoutAmount > 0;
-  // Paying your own account spends fiat, so the fiat balance bounds it.
-  const overFiatBalance = isOwnAccountPayout && amountValid && payoutAmount > fiatAvailable;
+  // Every payout on the web is typed and paid in the sender's own currency
+  // (cross-border included: lib/globalSend sends amountIn 'fiat'), so the
+  // fiat balance bounds it.
+  const overFiatBalance = amountValid && payoutAmount > fiatAvailable;
+  // The corridor's minimum is set in the stablecoin; shown in naira at the
+  // live rate, so the user is not left converting it themselves.
+  const minInFiat =
+    corridor?.minAssetAmount && preview.data?.rate
+      ? formatMoney(Number(corridor.minAssetAmount) * preview.data.rate, fiatCurrency || preview.data.sourceCurrency)
+      : null;
   // A capability the operator has stopped. The server refuses it anyway; this
   // is so the refusal arrives before someone types in a beneficiary.
   const sendFeature = featureState(features, isOwnAccountPayout ? "withdrawal" : "global_send");
@@ -691,15 +701,19 @@ export function FiatSend({ asset }: { asset: string }) {
       )}
 
       <Input
-        label={isOwnAccountPayout ? `Amount (${fiatCurrency})` : `Payout Amount (${asset})`}
+        label={fiatCurrency ? `Amount (${fiatCurrency})` : "Amount"}
         placeholder="0.00"
         inputMode="decimal"
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
         hint={
           !isOwnAccountPayout && corridor?.minAssetAmount
-            ? `Minimum ${corridor.minAssetAmount} ${asset} after fees.`
-            : undefined
+            ? minInFiat
+              ? `Minimum about ${minInFiat} after fees. Available: ${formatMoney(fiatAvailable, fiatCurrency)}.`
+              : `Minimum ${corridor.minAssetAmount} ${asset} after fees.`
+            : !isOwnAccountPayout && fiatCurrency
+              ? `Available: ${formatMoney(fiatAvailable, fiatCurrency)}.`
+              : undefined
         }
       />
 

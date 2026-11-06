@@ -249,9 +249,11 @@ export async function quoteGlobalSend(input: {
   asset?: string;
 }): Promise<GlobalSendQuote> {
   // Read-only pricing; nothing is reserved, so a retry is harmless.
+  // amountIn 'fiat': the web always asks for the amount in naira, and the
+  // server would otherwise read it in USDT for someone holding that much.
   const res = await api.post<{ data: GlobalSendQuote }>(
     "/global-send/quote",
-    input,
+    { ...input, amountIn: "fiat" },
     { retry: true },
   );
   return res.data;
@@ -390,7 +392,8 @@ export async function initiateGlobalSend(input: {
 }): Promise<GlobalSendResult> {
   const res = await api.post<{ data: GlobalSendResult }>(
     "/global-send/initiate",
-    input,
+    // Always in the sender's own currency on the web; see quoteGlobalSend.
+    { ...input, amountIn: "fiat" },
     // Never auto-retry a debit: a retried request that the server did receive
     // would look like a failure here while the money had already moved.
     { idempotencyKey: input.reference, retry: false },
